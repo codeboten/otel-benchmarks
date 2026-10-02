@@ -13,7 +13,14 @@ async def lifespan(app: FastAPI):
     await app.state.rdb.aclose()
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    lifespan=lifespan,
+    # FastAPI's own built-in OpenTelemetry integration auto-configures itself
+    # from the same OTEL_* env vars opentelemetry-instrument uses, which
+    # produced a second, independent export pipeline tracing every request
+    # twice. We already instrument explicitly below, so turn that off.
+    telemetry={"auto_configure": False},
+)
 
 
 @app.get("/", response_class=PlainTextResponse)
