@@ -1,0 +1,65 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  podman_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 5s
+    timeout: 5s
+
+processors:
+  batch: {}
+
+extensions:
+  basicauth/grafana_cloud:
+    client_auth:
+      username: ${env:GRAFANA_CLOUD_INSTANCE_ID}
+      password: ${env:GRAFANA_CLOUD_API_KEY}
+
+exporters:
+  otlphttp/grafana_cloud:
+    endpoint: ${env:GRAFANA_CLOUD_OTLP_ENDPOINT}
+    auth:
+      authenticator: basicauth/grafana_cloud
+
+  # Local mirror of the podman_stats metrics so the bench script can read
+  # CPU/memory for the measurement window without querying upstream.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    resource_to_telemetry_conversion:
+      enabled: true
+  debug:
+    verbosity: detailed
+
+service:
+  extensions: [basicauth/grafana_cloud]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    metrics:
+      receivers: [podman_stats]
+      processors: [batch]
+      exporters: [otlphttp/grafana_cloud, prometheus]
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: '0.0.0.0'
+                port: 8888
+        - periodic:
+            interval: 5000
+            exporter:
+              otlp:
+                protocol: http/protobuf
+                endpoint: ${env:GRAFANA_CLOUD_OTLP_ENDPOINT}/v1/metrics
+                headers:
+                  - name: "Authorization"
+                    value: "Basic ${env:GRAFANA_CLOUD_TOKEN}"

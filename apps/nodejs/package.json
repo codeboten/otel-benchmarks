@@ -1,0 +1,9 @@
+{
+  "name": "otel-overhead-bench-nodejs",
+  "private": true,
+  "dependencies": {
+    "express": "^5.0.0",
+    "ioredis": "^5.4.0",
+    "@opentelemetry/auto-instrumentations-node": "0.80.0"
+  }
+}

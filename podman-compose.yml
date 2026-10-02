@@ -1,0 +1,73 @@
+name: otel-overhead-bench
+
+services:
+  valkey:
+    image: docker.io/valkey/valkey:8
+    restart: unless-stopped
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+
+  otelcol:
+    image: ${OTELCOL_IMAGE:-docker.io/otel/opentelemetry-collector-contrib:0.161.0}
+    restart: unless-stopped
+    # Numeric UID: the collector image is distroless and has no /etc/passwd
+    # entry for "root", so a by-name user would fail to resolve.
+    user: "0:0"
+    # The podman API socket is root-owned and SELinux-labeled; disabling the
+    # label check is what lets the container process read it.
+    security_opt:
+      - label=disable
+    volumes:
+      - ./otelcol/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - ${PODMAN_SOCK_PATH:-/run/podman/podman.sock}:/var/run/docker.sock:ro
+    environment:
+      - GRAFANA_CLOUD_OTLP_ENDPOINT=${GRAFANA_CLOUD_OTLP_ENDPOINT}
+      - GRAFANA_CLOUD_INSTANCE_ID=${GRAFANA_CLOUD_INSTANCE_ID}
+      - GRAFANA_CLOUD_API_KEY=${GRAFANA_CLOUD_API_KEY}
+      - GRAFANA_CLOUD_TOKEN=${GRAFANA_CLOUD_TOKEN}
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "8888:8888" # collector self-telemetry (accepted/sent/dropped spans)
+      - "8889:8889" # local mirror of podman_stats container metrics
+
+  app-python:
+    build: ./apps/python
+    restart: unless-stopped
+    depends_on: [valkey, otelcol]
+    environment:
+      - ENABLE_OTEL=${ENABLE_OTEL:-}
+      - OTEL_TRACES_SAMPLER=${OTEL_TRACES_SAMPLER:-parentbased_always_on}
+      - OTEL_TRACES_SAMPLER_ARG=${OTEL_TRACES_SAMPLER_ARG:-1}
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otelcol:4318/v1/traces
+      - OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_LOGS_EXPORTER=none
+      - OTEL_SERVICE_NAME=bench-python
+      - VALKEY_HOST=valkey
+    ports:
+      - "8081:8080"
+
+  app-nodejs:
+    build: ./apps/nodejs
+    restart: unless-stopped
+    depends_on: [valkey, otelcol]
+    environment:
+      - ENABLE_OTEL=${ENABLE_OTEL:-}
+      - OTEL_TRACES_SAMPLER=${OTEL_TRACES_SAMPLER:-parentbased_always_on}
+      - OTEL_TRACES_SAMPLER_ARG=${OTEL_TRACES_SAMPLER_ARG:-1}
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otelcol:4318/v1/traces
+      - OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf
+      - VALKEY_HOST=valkey
+      - WORKERS=4
+    ports:
+      - "8082:8080"
+
+  # One-shot load generator, invoked with
+  # `podman compose run --rm -e TARGET_URL=... -e RATE=... -e DURATION=... k6 run /scripts/script.js`.
+  # Not started by `up` since it has no useful default command.
+  k6:
+    image: ${K6_IMAGE:-docker.io/grafana/k6:latest}
+    volumes:
+      - ./k6/script.js:/scripts/script.js:ro
+      - ./results:/results
+    profiles: ["bench"]
