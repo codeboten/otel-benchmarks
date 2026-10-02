@@ -33,7 +33,7 @@ exporters:
     resource_to_telemetry_conversion:
       enabled: true
   debug:
-    verbosity: detailed
+    verbosity: basic
 
 service:
   extensions: [basicauth/grafana_cloud]
