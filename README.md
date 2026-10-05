@@ -1,7 +1,7 @@
 # OpenTelemetry overhead benchmark (podman compose)
 
 A repeatable, local environment for measuring the CPU/memory/latency overhead
-of the OpenTelemetry SDK, following the methodology from [OpenTelemetry SDK overhead](https://coroot.com/docs/tracing/opentelemetry-overhead)
+of the OpenTelemetry SDK, following the methodology from [OpenTelemetry SDK overhead](https://docs.coroot.com/tracing/opentelemetry-overhead/)
 benchmark: a HTTP service that does one Redis call per request, hit with
 a constant request rate, run with tracing off / 100% / 50% / 20% / 0%
 sampled.
