@@ -62,6 +62,20 @@ services:
     ports:
       - "8082:8080"
 
+  app-ruby:
+    build: ./apps/ruby
+    restart: unless-stopped
+    depends_on: [valkey, otelcol]
+    environment:
+      - ENABLE_OTEL=${ENABLE_OTEL:-}
+      - OTEL_TRACES_SAMPLER=${OTEL_TRACES_SAMPLER:-parentbased_always_on}
+      - OTEL_TRACES_SAMPLER_ARG=${OTEL_TRACES_SAMPLER_ARG:-1}
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otelcol:4318/v1/traces
+      - OTEL_SERVICE_NAME=bench-ruby
+      - VALKEY_HOST=valkey
+    ports:
+      - "8083:8080"
+
   # One-shot load generator, invoked with
   # `podman compose run --rm -e TARGET_URL=... -e RATE=... -e DURATION=... k6 run /scripts/script.js`.
   # Not started by `up` since it has no useful default command.
