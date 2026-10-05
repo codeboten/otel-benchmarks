@@ -24,6 +24,7 @@ lang_port() {
     case "$1" in
     python) echo 8081 ;;
     nodejs) echo 8082 ;;
+    ruby) echo 8083 ;;
     esac
 }
 
@@ -31,6 +32,7 @@ lang_container() {
     case "$1" in
     python) echo "otel-overhead-bench-app-python-1" ;;
     nodejs) echo "otel-overhead-bench-app-nodejs-1" ;;
+    ruby) echo "otel-overhead-bench-app-ruby-1" ;;
     esac
 }
 
@@ -40,33 +42,43 @@ mkdir -p "$OUT_DIR"
 SUMMARY_CSV="${OUT_DIR}/summary.csv"
 echo "lang,mode,pass,requests_total,measure_s,throughput_rps,latency_p50_ms,latency_p99_ms,http_failed_ratio,cpu_cores_avg,mem_mb_avg,spans_accepted,spans_refused" >"$SUMMARY_CSV"
 
-mode_env() {
-    case "$1" in
-    off) printf 'ENABLE_OTEL=\n' ;;
-    100) printf 'ENABLE_OTEL=1\nOTEL_TRACES_SAMPLER=parentbased_always_on\nOTEL_TRACES_SAMPLER_ARG=1\n' ;;
-    50) printf 'ENABLE_OTEL=1\nOTEL_TRACES_SAMPLER=parentbased_traceidratio\nOTEL_TRACES_SAMPLER_ARG=0.5\n' ;;
-    20) printf 'ENABLE_OTEL=1\nOTEL_TRACES_SAMPLER=parentbased_traceidratio\nOTEL_TRACES_SAMPLER_ARG=0.2\n' ;;
-    0) printf 'ENABLE_OTEL=1\nOTEL_TRACES_SAMPLER=parentbased_traceidratio\nOTEL_TRACES_SAMPLER_ARG=0\n' ;;
-    esac
-}
-
+# `set -a; source .env` above already exported ENABLE_OTEL/OTEL_TRACES_SAMPLER*
+# into this script's own environment. docker-compose's variable interpolation
+# gives an already-exported shell var precedence over the .env FILE, so
+# rewriting the file (as this used to do) had no effect on any `podman
+# compose` call made for the rest of the script's life: every mode after the
+# first silently reused whatever was in .env when the script started.
+# Exporting directly, instead of rewriting the file, is both simpler and
+# actually takes effect.
 set_mode_env() {
-    mode_env "$1" >.env.mode
-    grep -vE '^(ENABLE_OTEL|OTEL_TRACES_SAMPLER|OTEL_TRACES_SAMPLER_ARG)=' .env >.env.tmp || true
-    cat .env.tmp .env.mode >.env
-    rm -f .env.tmp .env.mode
+    case "$1" in
+    off) export ENABLE_OTEL= ;;
+    100) export ENABLE_OTEL=1 OTEL_TRACES_SAMPLER=parentbased_always_on OTEL_TRACES_SAMPLER_ARG=1 ;;
+    50) export ENABLE_OTEL=1 OTEL_TRACES_SAMPLER=parentbased_traceidratio OTEL_TRACES_SAMPLER_ARG=0.5 ;;
+    20) export ENABLE_OTEL=1 OTEL_TRACES_SAMPLER=parentbased_traceidratio OTEL_TRACES_SAMPLER_ARG=0.2 ;;
+    0) export ENABLE_OTEL=1 OTEL_TRACES_SAMPLER=parentbased_traceidratio OTEL_TRACES_SAMPLER_ARG=0 ;;
+    esac
 }
 
 # Polls the collector's local podman_stats mirror (:8889) every 2s for the
 # given duration, writing "cpu_percent,mem_bytes" lines to out_file.
+#
+# Matches on container_id, not container_name: the prometheus exporter keeps
+# a dead container's last-known series around for a while after it's
+# replaced (same container_name, stale container_id), and since every mode
+# does a --force-recreate, matching by name alone can silently and
+# deterministically pick up the previous container generation's frozen
+# values for the entire run.
 sample_container_metrics() {
     local container="$1" dur="$2" out="$3"
+    local cid
+    cid="$(podman inspect "$container" --format '{{.Id}}' 2>/dev/null || true)"
     : >"$out"
     local end=$((SECONDS + dur))
     while [ "$SECONDS" -lt "$end" ]; do
-        curl -fsS http://localhost:8889/metrics 2>/dev/null | awk -v cn="$container" -v OFS=',' '
-            $0 ~ ("^container_cpu_percent_ratio\\{.*container_name=\"" cn "\"") { cpu = $NF }
-            $0 ~ ("^container_memory_usage_total_bytes\\{.*container_name=\"" cn "\"") { mem = $NF }
+        curl -fsS http://localhost:8889/metrics 2>/dev/null | awk -v id="$cid" -v OFS=',' '
+            $0 ~ ("^container_cpu_percent_ratio\\{.*container_id=\"" id "\"") { cpu = $NF }
+            $0 ~ ("^container_memory_usage_total_bytes\\{.*container_id=\"" id "\"") { mem = $NF }
             END { if (cpu != "") print cpu, mem }
         ' >>"$out"
         sleep 2
