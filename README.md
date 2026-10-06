@@ -28,8 +28,8 @@ compose project on a laptop.
     `podman_stats` container metrics go to Grafana Cloud. Point the traces
     pipeline at `otlphttp/grafana_cloud` instead if you want to browse traces
     there.
-- **app-python** / **app-nodejs** / **app-ruby** — the app under test, one
-  per language, each exposed on its own host port (8081/8082/8083) and each
+- **app-python** / **app-nodejs** / **app-ruby** / **app-rust** — the app under test, one
+  per language, each exposed on its own host port (8081/8082/8083/8084) and each
   built so the exact same image runs with or without tracing depending on
   `ENABLE_OTEL`.
 - **k6** — the load generator, invoked on demand with
@@ -45,7 +45,7 @@ compose project on a laptop.
    locates podman's Docker-compatible API socket, verifies it's reachable
    from a container, builds the images, and starts `valkey` + `otelcol`.
 3. Bring the app containers up as needed, e.g.
-   `podman compose -f podman-compose.yml up -d app-python app-nodejs app-ruby`.
+   `podman compose -f podman-compose.yml up -d app-python app-nodejs app-ruby app-rust`.
 
 On macOS, the podman machine VM should have at least 4 CPUs and 8GB RAM
 (`podman machine set --cpus 6 --memory 8192`, then restart the machine) —
@@ -57,7 +57,7 @@ will be dominated by contention, not by the SDK. All the numbers in
 ## Running the benchmark
 
 ```sh
-LANGS="python nodejs ruby" ./scripts/run-benchmark.sh
+LANGS="python nodejs ruby rust" ./scripts/run-benchmark.sh
 ```
 
 Each language runs its own full off/100/50/20/0% x 2-pass sweep with the
@@ -66,14 +66,14 @@ CPU. Key environment variables (all optional):
 
 | var | default | meaning |
 |---|---|---|
-| `LANGS` | `python nodejs` | space-separated subset of `python nodejs ruby` |
+| `LANGS` | `python nodejs` | space-separated subset of `python nodejs ruby rust` |
 | `MODES` | `off 100 50 20 0` | sampling modes to run |
 | `PASSES` | `2` | repeats per mode |
 | `WARMUP_SECONDS` | `90` | load-bearing warmup before measuring, discarded |
 | `MEASURE_SECONDS` | `240` | measurement window |
 | `LOAD_RATE` | `1000` | requests/second held by k6 |
 
-A full `python nodejs ruby` x 5 modes x 2 passes sweep takes about 165
+A full `python nodejs ruby rust` x 5 modes x 2 passes sweep takes about 220
 minutes (90s warmup + 240s measure, per mode, per pass, per language).
 
 Output lands in `results/<timestamp>/`: `summary.csv` (one row per
@@ -82,7 +82,7 @@ container CPU/mem samples.
 
 ## Results
 
-Collected 2026-10-05, `python nodejs ruby` x 5 modes x 2 passes, 1000 req/s,
+Collected 2026-10-05, `python nodejs ruby rust` x 5 modes x 2 passes, 1000 req/s,
 on a 2-vCPU podman machine (see the CPU caveat above — read this as relative
 overhead per language, not absolute cost). CPU overhead is relative to that
 language's own `off` baseline.
@@ -104,3 +104,8 @@ language's own `off` baseline.
 | ruby | 50% | 0.204 | +40% | 223 | 0.25 | 1.76 |
 | ruby | 20% | 0.184 | +27% | 216 | 0.23 | 1.41 |
 | ruby | 0% | 0.172 | +19% | 181 | 0.24 | 0.77 |
+| rust | off | 0.028 | – | 7.7 | 0.13 | 0.35 |
+| rust | 100% | 0.035 | **+27%** | 9.4 | 0.13 | 0.38 |
+| rust | 50% | 0.038 | +40%† | 9.3 | 0.14 | 0.35 |
+| rust | 20% | 0.046 | +67%† | 9.4 | 0.15 | 0.35 |
+| rust | 0% | 0.030 | +9% | 8.6 | 0.13 | 0.30 |

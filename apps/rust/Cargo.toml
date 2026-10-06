@@ -1,0 +1,13 @@
+[package]
+name = "bench-rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+axum = "0.8"
+redis = { version = "1.7.1", features = ["tokio-comp", "connection-manager"] }
+opentelemetry = "0.33"
+opentelemetry_sdk = { version = "0.33", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.33", features = ["http-proto", "reqwest-blocking-client"] }
+opentelemetry-http = "0.33"
