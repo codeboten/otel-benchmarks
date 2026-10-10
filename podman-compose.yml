@@ -90,6 +90,22 @@ services:
     ports:
       - "8084:8080"
 
+  app-python-hc:
+    build: ./apps/python-honeycomb
+    restart: unless-stopped
+    depends_on: [valkey, otelcol]
+    environment:
+      - ENABLE_OTEL=${ENABLE_OTEL:-}
+      # honeycomb-pycpp is config-file driven, not SDK-env-var driven (see
+      # otel-config.yaml); this just feeds the same ratio through under a
+      # name its config file substitutes.
+      - OTEL_SAMPLER_RATIO=${OTEL_TRACES_SAMPLER_ARG:-1}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otelcol:4318
+      - OTEL_SERVICE_NAME=bench-python-honeycomb
+      - VALKEY_HOST=valkey
+    ports:
+      - "8085:8080"
+
   # One-shot load generator, invoked with
   # `podman compose run --rm -e TARGET_URL=... -e RATE=... -e DURATION=... k6 run /scripts/script.js`.
   # Not started by `up` since it has no useful default command.

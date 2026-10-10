@@ -26,6 +26,7 @@ lang_port() {
     nodejs) echo 8082 ;;
     ruby) echo 8083 ;;
     rust) echo 8084 ;;
+    python-hc) echo 8085 ;;
     esac
 }
 
@@ -35,6 +36,7 @@ lang_container() {
     nodejs) echo "otel-overhead-bench-app-nodejs-1" ;;
     ruby) echo "otel-overhead-bench-app-ruby-1" ;;
     rust) echo "otel-overhead-bench-app-rust-1" ;;
+    python-hc) echo "otel-overhead-bench-app-python-hc-1" ;;
     esac
 }
 
