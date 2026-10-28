@@ -42,6 +42,10 @@ service:
       receivers: [otlp]
       processors: [batch]
       exporters: [debug]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/grafana_cloud]
     metrics:
       receivers: [podman_stats]
       processors: [batch]
