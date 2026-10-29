@@ -1,2 +1,5 @@
 .env
 results/**
+
+# Rebuilt by apps/*/build-wheel.sh; platform-specific binary artifacts, not source.
+apps/*/dist/

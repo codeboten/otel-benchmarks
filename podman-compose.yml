@@ -90,7 +90,7 @@ services:
     ports:
       - "8084:8080"
 
-  app-python-hc:
+  app-python-cpp:
     build: ./apps/python-honeycomb
     restart: unless-stopped
     depends_on: [valkey, otelcol]
@@ -106,6 +106,22 @@ services:
     ports:
       - "8085:8080"
 
+  app-python-rust:
+    build: ./apps/python-rust-sdk
+    restart: unless-stopped
+    depends_on: [valkey, otelcol]
+    environment:
+      - ENABLE_OTEL=${ENABLE_OTEL:-}
+      # otel_ffi_sdk is config-file driven, not SDK-env-var driven (see
+      # otel-config.yaml) -- same pattern as app-python-cpp above, just a
+      # Rust SDK behind the config file instead of a C++ one.
+      - OTEL_SAMPLER_RATIO=${OTEL_TRACES_SAMPLER_ARG:-1}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otelcol:4318
+      - OTEL_SERVICE_NAME=bench-python-rust-sdk
+      - VALKEY_HOST=valkey
+    ports:
+      - "8086:8080"
+
   # One-shot load generator, invoked with
   # `podman compose run --rm -e TARGET_URL=... -e RATE=... -e DURATION=... k6 run /scripts/script.js`.
   # Not started by `up` since it has no useful default command.
@@ -114,4 +130,12 @@ services:
     volumes:
       - ./k6/script.js:/scripts/script.js:ro
       - ./results:/results
+    profiles: ["bench"]
+
+  # One-shot log emitter, invoked with
+  # `podman compose run --rm telemetrygen logs --otlp-endpoint otelcol:4318 ...`.
+  # Used by run-benchmark.sh to mark each scenario with a log record that
+  # flows through the real otlphttp/grafana_cloud exporter.
+  telemetrygen:
+    image: ${TELEMETRYGEN_IMAGE:-ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:latest}
     profiles: ["bench"]

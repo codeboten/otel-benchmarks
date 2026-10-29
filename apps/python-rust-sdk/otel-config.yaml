@@ -1,0 +1,26 @@
+# OpenTelemetry declarative file configuration
+# (https://opentelemetry.io/docs/specs/otel/configuration/file-configuration/).
+# otel_ffi_sdk is config-file driven like honeycomb-pycpp (see
+# ../python-honeycomb/otel-config.yaml), not SDK-environment-variable driven,
+# so the sampling ratio is threaded through as a ${...}-substituted value
+# fed from the same OTEL_TRACES_SAMPLER_ARG the other apps use (1/0.5/0.2/0
+# for 100/50/20/0%), via the compose service's OTEL_SAMPLER_RATIO env var.
+#
+# resource.attributes_list (a single "key=value" pair here) is used instead
+# of honeycomb-pycpp's resource.attributes list-of-maps form: otel_ffi_sdk's
+# declarative-config loader only implements the env-var-style
+# attributes_list shape from the spec, not the list-of-maps one.
+file_format: "1.0"
+resource:
+  attributes_list: "service.name=${OTEL_SERVICE_NAME}"
+tracer_provider:
+  processors:
+    - batch:
+        exporter:
+          otlp_http:
+            endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT}/v1/traces
+  sampler:
+    parent_based:
+      root:
+        trace_id_ratio_based:
+          ratio: ${OTEL_SAMPLER_RATIO}
