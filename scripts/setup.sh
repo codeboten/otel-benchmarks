@@ -78,6 +78,13 @@ EOF
 fi
 echo "ok"
 
+echo "== building app-local wheels/binaries not published anywhere =="
+for build_script in apps/*/build-wheel.sh; do
+    [ -f "$build_script" ] || continue
+    echo "-- $build_script --"
+    "$build_script"
+done
+
 echo "== building images =="
 podman compose -f podman-compose.yml build
 

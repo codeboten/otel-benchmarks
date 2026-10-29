@@ -26,7 +26,8 @@ lang_port() {
     nodejs) echo 8082 ;;
     ruby) echo 8083 ;;
     rust) echo 8084 ;;
-    python-hc) echo 8085 ;;
+    python-cpp) echo 8085 ;;
+    python-rust) echo 8086 ;;
     esac
 }
 
@@ -36,7 +37,8 @@ lang_container() {
     nodejs) echo "otel-overhead-bench-app-nodejs-1" ;;
     ruby) echo "otel-overhead-bench-app-ruby-1" ;;
     rust) echo "otel-overhead-bench-app-rust-1" ;;
-    python-hc) echo "otel-overhead-bench-app-python-hc-1" ;;
+    python-cpp) echo "otel-overhead-bench-app-python-cpp-1" ;;
+    python-rust) echo "otel-overhead-bench-app-python-rust-1" ;;
     esac
 }
 
@@ -93,12 +95,36 @@ avg_col() {
     awk -F',' -v col="$2" '{ v=$col; if (v!="") { sum+=v; n++ } } END { if (n>0) printf "%.4f", sum/n; else print "" }' "$1"
 }
 
+# Marks the start of this scenario with one log record sent through the
+# real otlphttp/grafana_cloud exporter (via telemetrygen), tagged with which
+# language/mode/pass it is, so each run is identifiable in Grafana Cloud.
+# Best-effort: a failure here shouldn't abort the whole sweep.
+send_scenario_log() {
+    local lang="$1" mode="$2" pass="$3" tag="$4"
+    podman compose -f podman-compose.yml run --rm telemetrygen \
+        logs \
+        --otlp-endpoint otelcol:4318 \
+        --otlp-http \
+        --otlp-insecure \
+        --logs 1 \
+        --service telemetrygen \
+        --body "otel-overhead-bench scenario starting: ${tag}" \
+        --severity-text Info \
+        --otlp-attributes "benchmark.language=\"${lang}\"" \
+        --otlp-attributes 'benchmark.component="otel-overhead-bench"' \
+        --telemetry-attributes "benchmark.scenario=\"${tag}\"" \
+        --telemetry-attributes "benchmark.mode=\"${mode}\"" \
+        --telemetry-attributes "benchmark.pass=\"${pass}\"" \
+        >/dev/null 2>&1 || echo "warning: telemetrygen log failed for ${tag}" >&2
+}
+
 run_one() {
     local lang="$1" mode="$2" pass="$3"
     local service="app-${lang}" port="$(lang_port "$lang")" container="$(lang_container "$lang")"
     local tag="${lang}-${mode}-pass${pass}"
 
     echo "=== ${tag} ==="
+    send_scenario_log "$lang" "$mode" "$pass" "$tag"
     set_mode_env "$mode"
     podman compose -f podman-compose.yml up -d --force-recreate "$service"
     wait_for_http "http://localhost:${port}/" 60
